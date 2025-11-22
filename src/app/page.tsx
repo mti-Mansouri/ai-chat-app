@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Send, Paperclip, LogOut, Stethoscope, Loader2, Activity } from 'lucide-react'
-// FIX: Import from your local lib file using a relative path to avoid resolution errors
-import { createClient } from '../lib/supabaseClient'
+import { useRouter } from 'next/navigation' // Changed from direct window usage
+import { createClient } from '@/lib/supabaseClient' // Ensure this file matches Step 1
 
 // --- Custom Chat Hook ---
 function useCustomChat({ api }: { api: string }) {
@@ -19,7 +19,6 @@ function useCustomChat({ api }: { api: string }) {
     e.preventDefault()
     if (!input.trim()) return
 
-    // 1. Optimistic UI Update (Show user message immediately)
     const userMessage = { 
       id: Date.now().toString(), 
       role: 'user', 
@@ -31,19 +30,16 @@ function useCustomChat({ api }: { api: string }) {
     setIsLoading(true)
 
     try {
-      // 2. Send to Server (Server will save User Message + Generate AI Response + Save AI Response)
       const response = await fetch(api, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // We send the conversation context, but the server prefers its DB memory
           messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
         })
       })
 
       if (!response.body) throw new Error('No response body')
 
-      // 3. Stream Response
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let assistantMessage = { 
@@ -72,7 +68,7 @@ function useCustomChat({ api }: { api: string }) {
       setMessages(prev => [...prev, { 
         id: Date.now().toString(), 
         role: 'assistant', 
-        content: "I'm having trouble connecting to the Health Assistant. Please check your connection.", 
+        content: "I'm having trouble connecting to the Health Assistant.", 
         createdAt: new Date() 
       }])
     } finally {
@@ -84,8 +80,8 @@ function useCustomChat({ api }: { api: string }) {
 }
 
 export default function ChatPage() {
-  // Initialize Supabase Client using your existing helper
   const supabase = createClient()
+  const router = useRouter() // Use Next.js router
 
   const [user, setUser] = useState<any>(null)
   const [loadingAuth, setLoadingAuth] = useState(true)
@@ -100,38 +96,41 @@ export default function ChatPage() {
   // 1. Authentication & Load History
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
       
-      if (session) {
-        setUser(session.user)
+      if (error || !session) {
+        // FIX: Use router.replace instead of window.location
+        // This allows the client to handle the state change smoothly
+        // without triggering a full server reload loop.
+        router.replace('/auth')
+        return
+      }
 
-        // Fetch History from DB
-        const { data: history, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .order('created_at', { ascending: true })
+      setUser(session.user)
 
-        if (error) console.error("Error fetching history:", error)
+      // Fetch History
+      const { data: history, error: historyError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true })
 
-        if (history) {
-          setMessages(history.map(msg => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            createdAt: new Date(msg.created_at)
-          })))
-        }
-      } else {
-        // Redirect if not logged in
-        if (typeof window !== 'undefined') window.location.href = '/auth'
+      if (historyError) console.error("Error fetching history:", historyError)
+
+      if (history) {
+        setMessages(history.map(msg => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          createdAt: new Date(msg.created_at)
+        })))
       }
       setLoadingAuth(false)
     }
     checkUser()
-  }, [])
+  }, [router, setMessages])
 
-  // 2. Auto-scroll to bottom on new message
+  // 2. Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -146,7 +145,6 @@ export default function ChatPage() {
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}/${Date.now()}.${fileExt}`
 
-      // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('chat-images')
         .upload(fileName, file)
@@ -155,7 +153,6 @@ export default function ChatPage() {
 
       const { data } = supabase.storage.from('chat-images').getPublicUrl(fileName)
       
-      // Append image URL to text input for user to send
       const syntheticEvent = {
         target: { value: input + ` [Image: ${data.publicUrl}]` }
       } as React.ChangeEvent<HTMLInputElement>
@@ -170,7 +167,9 @@ export default function ChatPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    window.location.href = '/auth'
+    // Soft refresh then redirect
+    router.refresh()
+    router.replace('/auth')
   }
 
   if (loadingAuth) return (
@@ -182,6 +181,7 @@ export default function ChatPage() {
     </div>
   )
   
+  // Safety return if auth failed but redirect hasn't completed yet
   if (!user) return null
 
   return (
@@ -212,7 +212,7 @@ export default function ChatPage() {
         </button>
       </header>
 
-      {/* Chat Area - Clean Clinical Look */}
+      {/* Chat Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50">
         <div className="mx-auto max-w-3xl flex flex-col space-y-6">
           {messages.length === 0 && (

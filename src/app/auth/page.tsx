@@ -272,7 +272,7 @@ export default function AuthPage() {
           </h1>
           <p className="text-lg text-blue-100 max-w-md leading-relaxed opacity-90">
             Experience the next generation of patient care. 
-            Our <span className="font-bold text-white">Patient-Facing Agent</span> leverages advanced AI to decode medical records and provide real-time health assistance.
+            Our <span className="font-bold text-white">NexusCare</span> leverages advanced AI to decode medical records and provide real-time health assistance.
           </p>
         </div>
 
@@ -293,7 +293,7 @@ export default function AuthPage() {
             </div>
             <div className="group flex items-center gap-3 transition-all hover:translate-x-2">
               <div className="h-2 w-2 rounded-full bg-indigo-300"></div>
-              <span className="text-xl font-medium">Matin Zomorodi</span>
+              <span className="text-xl font-medium">Matin Zomorrodabedi</span>
             </div>
           </div>
         </div>

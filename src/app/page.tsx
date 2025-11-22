@@ -38,7 +38,11 @@ function useCustomChat({ api }: { api: string }) {
         })
       })
 
-      if (!response.body) throw new Error('No response body')
+      if (!response.body){ 
+        const errorDetails = await response.text();
+        console.log((`Server Error: ${response.status} - ${errorDetails}`));
+        console.log(errorDetails)
+        throw new Error('No response body')}
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
